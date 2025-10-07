@@ -1,103 +1,123 @@
-import Image from "next/image";
+"use client";
+
+import { useMemo, useRef, useState } from "react";
+import CSVImport, { ProductCsvRow } from "@/components/CSVImport";
+import CSVTable from "@/components/CSVTable";
+import ProductForm, { ProductFormValue, emptyProductForm } from "@/components/ProductForm";
+import ResultCard from "@/components/ResultCard";
+import type { OptimizeInput } from "@/lib/prompts";
+import type { OptimizedContent } from "@/lib/schema";
+
+const toFormValue = (row: ProductCsvRow): ProductFormValue => ({
+  title: row.title ?? "",
+  descriptionHtml: row.descriptionHtml ?? "",
+  tags: row.tags?.join(", ") ?? "",
+  seoTitle: row.seoTitle ?? "",
+  seoDescription: row.seoDescription ?? "",
+  language: row.language ?? "fr",
+  audience: row.audience ?? "",
+  inspiration: row.inspiration ?? "",
+  culturalRefs: row.culturalRefs?.join(", ") ?? "",
+  illustration: row.illustration ?? false,
+  materials: row.materials ?? "",
+  colorway: row.colorway ?? "",
+  fit: row.fit ?? "",
+  sizingNotes: row.sizingNotes ?? "",
+  care: row.care ?? "",
+  printMethod: row.printMethod ?? "",
+  origin: row.origin ?? "",
+});
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [form, setForm] = useState<ProductFormValue>(emptyProductForm);
+  const [rows, setRows] = useState<ProductCsvRow[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [result, setResult] = useState<OptimizedContent | null>(null);
+  const formRef = useRef<HTMLDivElement | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const handleOptimize = async (payload: OptimizeInput) => {
+    try {
+      const response = await fetch("/api/optimize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Failed to generate content");
+      }
+
+      const data = (await response.json()) as OptimizedContent;
+      setResult(data);
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error("Failed to generate content");
+      setResult(null);
+      throw error;
+    }
+  };
+
+  const handleRows = (incoming: ProductCsvRow[]) => {
+    setRows(incoming);
+    setSelectedIndex(null);
+    setResult(null);
+  };
+
+  const loadRowIntoForm = (row: ProductCsvRow, index: number) => {
+    setSelectedIndex(index);
+    setForm(toFormValue(row));
+    setResult(null);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleFormChange = (next: ProductFormValue) => {
+    setForm(next);
+  };
+
+  const selectionMeta = useMemo(() => {
+    if (selectedIndex === null || !rows[selectedIndex]) {
+      return null;
+    }
+
+    const row = rows[selectedIndex];
+    return {
+      title: row.title ?? "Imported product",
+      productGid: row.productGid ?? undefined,
+    };
+  }, [rows, selectedIndex]);
+
+  return (
+    <main className="min-h-screen bg-neutral-50 px-4 py-12 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-50">
+      <div className="mx-auto flex max-w-5xl flex-col gap-10">
+        <header className="space-y-3">
+          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-neutral-500 dark:text-neutral-400">7anin copy optimizer</p>
+          <h1 className="text-3xl font-bold sm:text-4xl">Craft product storytelling that resonates.</h1>
+          <p className="max-w-2xl text-base text-neutral-600 dark:text-neutral-300">
+            Feed in your current product data and let our OpenAI-powered workflow craft culturally rooted copy you can ship to Shopify in one click.
+          </p>
+        </header>
+
+        <CSVImport onRows={handleRows} />
+        <CSVTable rows={rows} onSelect={loadRowIntoForm} selectedIndex={selectedIndex} />
+
+        <div ref={formRef} className="space-y-4">
+          <ProductForm value={form} onChange={handleFormChange} onOptimize={handleOptimize} />
+          {selectionMeta && (
+            <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-100 px-4 py-3 text-sm text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900/60 dark:text-neutral-200">
+              Loaded <span className="font-semibold">{selectionMeta.title}</span>
+              {selectionMeta.productGid && (
+                <>
+                  {" "}• Shopify GID: <span className="font-mono text-xs">{selectionMeta.productGid}</span>
+                </>
+              )}
+            </div>
+          )}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+
+        {result && <ResultCard data={result} />}
+      </div>
+    </main>
   );
 }
